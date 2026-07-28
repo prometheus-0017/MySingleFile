@@ -141,7 +141,7 @@ const DEFAULT_CONFIG = {
 	insertTextBody: false,
 	autoSaveExternalSave: false,
 	insertMetaNoIndex: false,
-	insertMetaCSP: true,
+	insertMetaCSP: false,
 	passReferrerOnError: false,
 	password: "",
 	insertSingleFileComment: true,

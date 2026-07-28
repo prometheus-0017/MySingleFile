@@ -1,13 +1,37 @@
 /*
- * pushFile utility - uploads resources to local cache server
- * Based on cache_server.py API:
- *   POST http://localhost:8080/cache/upload?name=<name>&mime=<mime>
- *   Returns: { url, hash, name } where url is http://cache.stellar:8080/<filename>
+ * pushFile utility - uploads resources to local cache server via WebSocket RPC
+ * Uses @xuri-rpc/websocket-sender to communicate with cache_server.py
+ * RPC server runs on ws://localhost:8081/
+ * HTTP file server runs on http://cache.stellar:8080/
  */
 
-const CACHE_SERVER_URL = "http://localhost:8080";
+import { createMain } from "@xuri-rpc/websocket-sender";
+
+const RPC_HOST = "localhost";
+const RPC_PORT = 8081;
+const RPC_PATH = "/";
+const HOST_ID = "singlefile-cache-client";
 
 export { pushFile };
+
+let _rpcClient = null;
+let _rpc = null;
+let _rpcReady = false;
+
+/**
+ * Lazily initialize the RPC connection to the cache server.
+ * Reconnects automatically if the connection is lost.
+ */
+async function ensureRpc() {
+	if (_rpcReady && _rpc) {
+		return _rpc;
+	}
+	const [client, main] = await createMain(HOST_ID, RPC_HOST, RPC_PORT, RPC_PATH);
+	_rpcClient = client;
+	_rpc = await client.getObject("rpc");
+	_rpcReady = true;
+	return _rpc;
+}
 
 /**
  * Upload a blob to the cache server and return the cache.stellar URL.
@@ -18,24 +42,34 @@ export { pushFile };
  * @param {string} [meta.expectedType] - Expected resource type (image, script, etc.)
  * @returns {Promise<string>} The cache.stellar URL for the uploaded resource
  */
+const CHUNK_SIZE = 100 * 1024; // 100KB per chunk
+
 async function pushFile(blob, { originalURL, contentType, expectedType } = {}) {
+	const rpc = await ensureRpc();
 	const name = generateName(originalURL, expectedType);
 	const mime = contentType || blob.type || "application/octet-stream";
 
-	const url = new URL(`${CACHE_SERVER_URL}/cache/upload`);
-	url.searchParams.set("name", name);
-	url.searchParams.set("mime", mime);
+	// Convert Blob to Uint8Array for chunked RPC transport
+	const arrayBuffer = await blob.arrayBuffer();
+	const data = new Uint8Array(arrayBuffer);
+	let offset = 0;
 
-	const response = await fetch(url.toString(), {
-		method: "POST",
-		body: blob
-	});
+	const remoteFile = {
+		read() {
+			if (offset >= data.length) {
+				return new Uint8Array(0);
+			}
+			const end = Math.min(offset + CHUNK_SIZE, data.length);
+			const chunk = data.slice(offset, end);
+			offset = end;
+			return chunk;
+		},
+	};
 
-	if (!response.ok) {
-		throw new Error(`pushFile: cache server returned ${response.status}`);
+	const result = await rpc.uploadV2(remoteFile, name, mime);
+	if (result.error) {
+		throw new Error(`pushFile: ${result.error}`);
 	}
-
-	const result = await response.json();
 	return result.url;
 }
 

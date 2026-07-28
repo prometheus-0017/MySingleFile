@@ -109,7 +109,8 @@ export default [{
 		file: "lib/single-file-extension.js",
 		format: "iife",
 		plugins: []
-	}]
+	}],
+	plugins: [resolve({ moduleDirectories: ["node_modules", ".."] })]
 }, {
 	input: ["src/ui/content/content-ui-editor-web.js"],
 	output: [{
@@ -149,7 +150,8 @@ export default [{
 		file: "lib/single-file-extension-offscreen-document.js",
 		format: "iife",
 		plugins: []
-	}]
+	}],
+	plugins: [resolve({ moduleDirectories: ["node_modules", ".."] })]
 }, {
 	input: ["src/lib/single-file/background.js"],
 	output: [{
